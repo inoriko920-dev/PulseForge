@@ -93,10 +93,14 @@ Set-Content -LiteralPath (Join-Path $stage 'README_START_HERE.txt') -Value $read
 Set-Content -LiteralPath (Join-Path $stage 'data\README.txt') -Value 'Browser-profile data is stored under data\WebView2 when START_PULSEFORGE.cmd is used. Keep this folder for your settings.' -Encoding UTF8
 Set-Content -LiteralPath (Join-Path $stage 'output\README.txt') -Value 'Optional local directory for video exports. Choose this folder when exporting your MP4 from PulseForge.' -Encoding UTF8
 
-$ffmpegVersion = (& (Join-Path $stage 'bin\ffmpeg.exe') -version | Select-Object -First 1)
-if ($LASTEXITCODE -ne 0) { throw 'Packaged ffmpeg.exe failed its version check.' }
-$ffprobeVersion = (& (Join-Path $stage 'bin\ffprobe.exe') -version | Select-Object -First 1)
-if ($LASTEXITCODE -ne 0) { throw 'Packaged ffprobe.exe failed its version check.' }
+$ffmpegVersionOutput = & (Join-Path $stage 'bin\ffmpeg.exe') -version
+$ffmpegExitCode = $LASTEXITCODE
+if ($ffmpegExitCode -ne 0) { throw "Packaged ffmpeg.exe failed its version check (exit $ffmpegExitCode)." }
+$ffmpegVersion = @($ffmpegVersionOutput)[0]
+$ffprobeVersionOutput = & (Join-Path $stage 'bin\ffprobe.exe') -version
+$ffprobeExitCode = $LASTEXITCODE
+if ($ffprobeExitCode -ne 0) { throw "Packaged ffprobe.exe failed its version check (exit $ffprobeExitCode)." }
+$ffprobeVersion = @($ffprobeVersionOutput)[0]
 
 $notices = @'
 PulseForge source: https://github.com/TheAwaken1/PulseForge
