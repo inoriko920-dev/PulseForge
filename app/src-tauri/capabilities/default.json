@@ -1,7 +1,9 @@
 {
   "identifier": "default",
   "description": "Default capability for PulseForge",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "dialog:default",
@@ -11,7 +13,6 @@
     "fs:allow-read",
     "fs:allow-write",
     "shell:default",
-    "shell:allow-execute",
-    "shell:allow-sidecar"
+    "shell:allow-execute"
   ]
 }
