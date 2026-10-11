@@ -57,11 +57,26 @@ impl Default for ExportState {
     }
 }
 
-/// Locate the ffmpeg binary. Checks for sidecar first, then system PATH.
-fn find_ffmpeg() -> String {
-    // In production, Tauri bundles it as a sidecar.
-    // In development, fall back to system ffmpeg.
-    "ffmpeg".to_string()
+/// Prefer the bundled FFmpeg sidecar, falling back to the system PATH
+/// for development builds. Tauri's Windows NSIS bundle installs the sidecar
+/// under the app's resource directory; a bare `ffmpeg` command would miss it.
+fn find_ffmpeg(app: &tauri::AppHandle) -> std::path::PathBuf {
+    use tauri::Manager;
+
+    let mut candidates = Vec::new();
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        candidates.push(resource_dir.join("bin").join("ffmpeg.exe"));
+        candidates.push(resource_dir.join("ffmpeg.exe"));
+    }
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            candidates.push(exe_dir.join("bin").join("ffmpeg.exe"));
+            candidates.push(exe_dir.join("ffmpeg.exe"));
+        }
+    }
+
+    candidates.into_iter().find(|path| path.is_file())
+        .unwrap_or_else(|| std::path::PathBuf::from("ffmpeg"))
 }
 
 #[tauri::command]
@@ -69,7 +84,7 @@ pub async fn start_export(
     settings: ExportSettings,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
-    let ffmpeg_path = find_ffmpeg();
+    let ffmpeg_path = find_ffmpeg(&app);
     if let Some(parent) = std::path::Path::new(&settings.output_path).parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent)
