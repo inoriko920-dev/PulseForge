@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
-use tauri::State;
+use tauri::{Manager, State};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportSettings {
@@ -61,7 +61,6 @@ impl Default for ExportState {
 /// for development builds. Tauri's Windows NSIS bundle installs the sidecar
 /// under the app's resource directory; a bare `ffmpeg` command would miss it.
 fn find_ffmpeg(app: &tauri::AppHandle) -> std::path::PathBuf {
-    use tauri::Manager;
 
     let mut candidates = Vec::new();
     if let Ok(resource_dir) = app.path().resource_dir() {
