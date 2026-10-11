@@ -1,4 +1,4 @@
-name: Build PulseForge for Windows
+name: Build PulseForge Portable Windows ZIP
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  windows-installer:
+  portable-windows-x64:
     runs-on: windows-2022
     timeout-minutes: 120
     steps:
@@ -39,49 +39,49 @@ jobs:
         working-directory: app
         run: npm ci
 
-      - name: Derive Windows application icons from the existing logo
+      - name: Generate Windows icons from original logo
         working-directory: app
         run: npm run tauri -- icon ../icon.png
 
-      - name: Bundle FFmpeg executable
+      - name: Prepare portable FFmpeg tools
         shell: pwsh
         run: |
           choco install ffmpeg --yes --no-progress
           if ($LASTEXITCODE -ne 0) { throw "Chocolatey FFmpeg install failed." }
-          $candidates = Get-ChildItem -Path "$env:ChocolateyInstall\lib" -Filter ffmpeg.exe -Recurse -File -ErrorAction SilentlyContinue
-          $ffmpeg = $candidates | Where-Object { $_.FullName -match "ffmpeg" } | Select-Object -First 1
-          if (-not $ffmpeg) { throw "Cannot find actual ffmpeg.exe after installation." }
-          New-Item -Path app/src-tauri/bin -ItemType Directory -Force | Out-Null
-          Copy-Item -LiteralPath $ffmpeg.FullName -Destination app/src-tauri/bin/ffmpeg-x86_64-pc-windows-msvc.exe -Force
-          & app/src-tauri/bin/ffmpeg-x86_64-pc-windows-msvc.exe -version | Select-Object -First 1
-          if ($LASTEXITCODE -ne 0) { throw "Bundled FFmpeg executable failed smoke test." }
+          $binDir = "app/src-tauri/bin"
+          New-Item -Path $binDir -ItemType Directory -Force | Out-Null
+          foreach ($tool in @("ffmpeg", "ffprobe")) {
+            $item = Get-ChildItem -Path "$env:ChocolateyInstall\lib" -Filter "$tool.exe" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $item) { throw "Cannot find $tool.exe after installation." }
+            Copy-Item -LiteralPath $item.FullName -Destination "$binDir/$tool-x86_64-pc-windows-msvc.exe" -Force
+            & "$binDir/$tool-x86_64-pc-windows-msvc.exe" -version | Select-Object -First 1
+            if ($LASTEXITCODE -ne 0) { throw "Bundled $tool.exe failed version check." }
+          }
 
-      - name: Build signed-off-free Windows NSIS installer
+      - name: Build raw PulseForge EXE without installer
         working-directory: app
-        run: npm run tauri -- build --bundles nsis
+        run: npm run tauri -- build --no-bundle
 
-      - name: Verify installer output
+      - name: Create and inspect multi-file portable ZIP
         shell: pwsh
-        run: |
-          $files = @(Get-ChildItem app/src-tauri/target/release/bundle/nsis -Filter "*.exe" -File)
-          if ($files.Count -eq 0) { throw "No NSIS installer produced." }
-          $files | ForEach-Object { Write-Host "$($_.Name) ($($_.Length) bytes)" }
+        run: ./scripts/package-portable.ps1
 
-      - name: Upload installable EXE artifact
+      - name: Upload portable ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PulseForge-Windows11-EXE
-          path: app/src-tauri/target/release/bundle/nsis/*.exe
+          name: PulseForge-Portable-Windows11-x64
+          path: portable-dist/PulseForge-Portable-Windows11-x64.zip
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish Windows preview in GitHub Releases
+      - name: Publish portable ZIP to GitHub Releases
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $installer = Get-ChildItem app/src-tauri/target/release/bundle/nsis -Filter "*.exe" -File | Select-Object -First 1
-          if (-not $installer) { throw "Installer not found for preview release." }
-          $tag = "windows-preview-${{ github.run_number }}"
-          gh release create $tag $installer.FullName --target "${{ github.sha }}" --title "PulseForge Windows Preview #${{ github.run_number }}" --notes "Unofficial Windows 11 preview build from the original PulseForge fork. Unsigned installer; test lyric sync, spectrum and MP4 export before production use." --prerelease
+          $zip = "portable-dist/PulseForge-Portable-Windows11-x64.zip"
+          if (-not (Test-Path -LiteralPath $zip -PathType Leaf)) { throw "Portable ZIP not found." }
+          $tag = "windows-portable-preview-${{ github.run_number }}"
+          gh release create $tag $zip --target "${{ github.sha }}" --title "PulseForge Portable Windows 11 #${{ github.run_number }}" --notes "Portable multi-file ZIP (no installer). Extract all files, run START_PULSEFORGE.cmd. Includes PulseForge.exe, FFmpeg tools, local-data launcher, notices, checksums. Unsigned preview; Windows 11 WebView2 Runtime required." --prerelease
+          if ($LASTEXITCODE -ne 0) { throw "Failed to publish portable preview release." }
